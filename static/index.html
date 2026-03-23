@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Construction Cost Estimator</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+        header {
+            text-align: center;
+            padding: 40px 0 30px;
+        }
+        header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #f8fafc;
+            margin-bottom: 8px;
+        }
+        header p { color: #94a3b8; font-size: 16px; }
+
+        /* Upload area */
+        .upload-area {
+            border: 2px dashed #334155;
+            border-radius: 16px;
+            padding: 60px 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #1e293b;
+            margin-bottom: 24px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #3b82f6;
+            background: #1e3a5f;
+        }
+        .upload-area svg {
+            width: 48px; height: 48px;
+            color: #64748b;
+            margin-bottom: 16px;
+        }
+        .upload-area h3 { font-size: 18px; margin-bottom: 8px; color: #cbd5e1; }
+        .upload-area p { color: #64748b; font-size: 14px; }
+        .upload-area input { display: none; }
+
+        /* Preview */
+        .preview { display: none; margin-bottom: 24px; }
+        .preview img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 12px;
+            border: 1px solid #334155;
+        }
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .btn {
+            padding: 10px 24px;
+            border-radius: 8px;
+            border: none;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-primary:disabled { background: #1e40af; opacity: 0.6; cursor: not-allowed; }
+        .btn-secondary {
+            background: #334155;
+            color: #cbd5e1;
+        }
+        .btn-secondary:hover { background: #475569; }
+
+        /* Loading */
+        .loading { display: none; text-align: center; padding: 60px 0; }
+        .spinner {
+            width: 48px; height: 48px;
+            border: 4px solid #334155;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading p { color: #94a3b8; }
+
+        /* Results */
+        .results { display: none; }
+        .scene-info {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .scene-info h3 { font-size: 16px; color: #94a3b8; margin-bottom: 8px; }
+        .scene-info p { color: #cbd5e1; line-height: 1.5; }
+
+        /* Summary cards */
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .summary-card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .summary-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+        .summary-card .value.cost { color: #22c55e; }
+        .summary-card .label {
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        /* Materials table */
+        .materials-table {
+            width: 100%;
+            background: #1e293b;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        .materials-table table { width: 100%; border-collapse: collapse; }
+        .materials-table th {
+            text-align: left;
+            padding: 14px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #0f172a;
+        }
+        .materials-table td {
+            padding: 12px 16px;
+            font-size: 14px;
+            border-top: 1px solid #1a2332;
+            color: #cbd5e1;
+        }
+        .materials-table tr:hover td { background: #253348; }
+
+        /* Confidence badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge-high { background: #14532d; color: #4ade80; }
+        .badge-medium { background: #422006; color: #fbbf24; }
+        .badge-low { background: #450a0a; color: #f87171; }
+        .badge-error { background: #1e1b4b; color: #a78bfa; }
+
+        /* Editable quantity */
+        .qty-input {
+            width: 80px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            color: #f8fafc;
+            padding: 4px 8px;
+            font-size: 14px;
+            text-align: right;
+        }
+        .qty-input:focus { border-color: #3b82f6; outline: none; }
+
+        /* Error */
+        .error-msg {
+            display: none;
+            background: #450a0a;
+            border: 1px solid #7f1d1d;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            color: #fca5a5;
+            margin-bottom: 24px;
+        }
+
+        /* History */
+        .history { margin-top: 40px; }
+        .history h2 { font-size: 20px; margin-bottom: 16px; color: #f8fafc; }
+        .history-item {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .history-item:hover { background: #253348; }
+        .history-item .desc { color: #cbd5e1; font-size: 14px; }
+        .history-item .meta { color: #64748b; font-size: 12px; margin-top: 4px; }
+        .history-item .cost { font-size: 18px; font-weight: 700; color: #22c55e; }
+        .empty-state { color: #475569; text-align: center; padding: 40px; }
+
+        @media (max-width: 600px) {
+            .summary { grid-template-columns: 1fr; }
+            .materials-table { overflow-x: auto; }
+            .container { padding: 12px; }
+            header { padding: 24px 0 20px; }
+            header h1 { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Construction Cost Estimator</h1>
+            <p>Upload a photo of your construction site to get material costs</p>
+        </header>
+
+        <!-- Upload -->
+        <div class="upload-area" id="uploadArea">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+            </svg>
+            <h3>Upload a construction site photo</h3>
+            <p>Tap to take a photo or choose from gallery. JPEG, PNG, WebP, HEIC supported. Max 20MB.</p>
+            <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment">
+        </div>
+
+        <!-- Preview -->
+        <div class="preview" id="preview">
+            <div class="preview-header">
+                <span id="fileName" style="color:#94a3b8; font-size:14px;"></span>
+                <div>
+                    <button class="btn btn-secondary" onclick="resetUpload()" style="margin-right:8px;">Change</button>
+                    <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()">Analyze & Estimate</button>
+                </div>
+            </div>
+            <img id="previewImg" alt="Preview">
+        </div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p id="loadingText">Analyzing construction materials...</p>
+        </div>
+
+        <!-- Error -->
+        <div class="error-msg" id="errorMsg"></div>
+
+        <!-- Results -->
+        <div class="results" id="results">
+            <div class="scene-info">
+                <h3>Scene Analysis</h3>
+                <p id="sceneDesc"></p>
+                <p id="limitations" style="color:#94a3b8; font-size:13px; margin-top:8px;"></p>
+            </div>
+
+            <div class="summary">
+                <div class="summary-card">
+                    <div class="value cost" id="totalCost">$0</div>
+                    <div class="label">Estimated Total</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value" id="materialCount">0</div>
+                    <div class="label">Materials Found</div>
+                </div>
+                <div class="summary-card">
+                    <div class="value" id="pricedCount">0</div>
+                    <div class="label">Materials Priced</div>
+                </div>
+            </div>
+
+            <div class="materials-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Material</th>
+                            <th>Quantity</th>
+                            <th>Unit</th>
+                            <th>Confidence</th>
+                            <th>Unit Cost</th>
+                            <th>Line Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="materialsBody"></tbody>
+                </table>
+            </div>
+
+            <div style="text-align:center;">
+                <button class="btn btn-primary" onclick="resetUpload()">New Estimate</button>
+            </div>
+        </div>
+
+        <!-- History -->
+        <div class="history" id="history">
+            <h2>Past Estimates</h2>
+            <div id="historyList"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        let currentMaterials = [];
+
+        // Drag & drop + click
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+        function handleFile(file) {
+            selectedFile = file;
+            document.getElementById('fileName').textContent = file.name;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('previewImg').src = e.target.result;
+                document.getElementById('preview').style.display = 'block';
+                uploadArea.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function resetUpload() {
+            selectedFile = null;
+            fileInput.value = '';
+            document.getElementById('preview').style.display = 'none';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('errorMsg').style.display = 'none';
+            uploadArea.style.display = 'block';
+        }
+
+        async function analyze() {
+            if (!selectedFile) return;
+
+            const btn = document.getElementById('analyzeBtn');
+            btn.disabled = true;
+            document.getElementById('preview').style.display = 'none';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('errorMsg').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
+
+            const steps = [
+                'Uploading image...',
+                'Analyzing construction materials with AI...',
+                'Matching materials to RSMeans database...',
+                'Looking up current pricing...',
+            ];
+            let step = 0;
+            const loadingText = document.getElementById('loadingText');
+            const interval = setInterval(() => {
+                step++;
+                if (step < steps.length) loadingText.textContent = steps[step];
+            }, 3000);
+
+            try {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+
+                const response = await fetch('/api/estimate', { method: 'POST', body: formData });
+                const data = await response.json();
+
+                clearInterval(interval);
+                document.getElementById('loading').style.display = 'none';
+
+                if (!response.ok || data.error) {
+                    document.getElementById('errorMsg').textContent = data.error || 'Analysis failed';
+                    document.getElementById('errorMsg').style.display = 'block';
+                    document.getElementById('preview').style.display = 'block';
+                    btn.disabled = false;
+                    return;
+                }
+
+                displayResults(data);
+                loadHistory();
+            } catch (err) {
+                clearInterval(interval);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('errorMsg').textContent = 'Network error. Please try again.';
+                document.getElementById('errorMsg').style.display = 'block';
+                document.getElementById('preview').style.display = 'block';
+                btn.disabled = false;
+            }
+        }
+
+        function displayResults(data) {
+            currentMaterials = data.materials || [];
+
+            document.getElementById('sceneDesc').textContent = data.scene_description || 'N/A';
+            document.getElementById('limitations').textContent = data.limitations ? 'Limitations: ' + data.limitations : '';
+            document.getElementById('totalCost').textContent = '$' + (data.total_cost || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('materialCount').textContent = data.material_count || 0;
+            document.getElementById('pricedCount').textContent = data.priced_count || 0;
+
+            const tbody = document.getElementById('materialsBody');
+            tbody.innerHTML = '';
+
+            currentMaterials.forEach((m, i) => {
+                const tr = document.createElement('tr');
+                const badgeClass = m.cost_error ? 'badge-error' : `badge-${m.confidence || 'low'}`;
+                const badgeText = m.cost_error ? 'no price' : (m.confidence || 'low');
+
+                const unitCostText = m.unit_cost != null ? '$' + m.unit_cost.toFixed(2) : (m.cost_error || 'N/A');
+                const lineTotalText = m.line_total != null ? '$' + m.line_total.toFixed(2) : '-';
+
+                const nameHtml = m.match_warning
+                    ? `${m.name}<br><small style="color:#fbbf24">${m.matched_name || ''} (verify)</small>`
+                    : m.match_error
+                    ? `${m.name}<br><small style="color:#f87171">${m.match_error}</small>`
+                    : `${m.name}${m.matched_name && m.matched_name !== m.name ? '<br><small style="color:#64748b">matched: ' + m.matched_name + '</small>' : ''}`;
+
+                tr.innerHTML = `
+                    <td>${nameHtml}</td>
+                    <td><input class="qty-input" type="number" value="${m.quantity || 0}" min="0" step="1" onchange="updateQty(${i}, this.value)"></td>
+                    <td>${m.unit || 'ea'}</td>
+                    <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+                    <td>${unitCostText}</td>
+                    <td class="line-total" id="lineTotal-${i}">${lineTotalText}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('results').style.display = 'block';
+        }
+
+        function updateQty(index, newQty) {
+            const qty = parseFloat(newQty) || 0;
+            currentMaterials[index].quantity = qty;
+
+            if (currentMaterials[index].unit_cost != null) {
+                const lineTotal = qty * currentMaterials[index].unit_cost;
+                currentMaterials[index].line_total = lineTotal;
+                document.getElementById(`lineTotal-${index}`).textContent = '$' + lineTotal.toFixed(2);
+            }
+
+            // Recalculate total
+            const total = currentMaterials.reduce((sum, m) => sum + (m.line_total || 0), 0);
+            document.getElementById('totalCost').textContent = '$' + total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/estimates?limit=10');
+                const data = await response.json();
+                const list = document.getElementById('historyList');
+
+                if (!data.estimates || data.estimates.length === 0) {
+                    list.innerHTML = '<div class="empty-state">No past estimates yet</div>';
+                    return;
+                }
+
+                list.innerHTML = data.estimates.map(e => `
+                    <div class="history-item" onclick="loadEstimate(${e.id})">
+                        <div>
+                            <div class="desc">${e.scene_description || 'Construction estimate'}</div>
+                            <div class="meta">${e.material_count} materials &middot; ${new Date(e.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <div class="cost">$${(e.total_cost || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to load history:', err);
+            }
+        }
+
+        async function loadEstimate(id) {
+            try {
+                const response = await fetch(`/api/estimates/${id}`);
+                const data = await response.json();
+                displayResults(data);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch (err) {
+                console.error('Failed to load estimate:', err);
+            }
+        }
+
+        // Load history on page load
+        loadHistory();
+    </script>
+</body>
+</html>
