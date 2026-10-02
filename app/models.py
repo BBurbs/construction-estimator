@@ -30,7 +30,7 @@ class Estimate(Base):
     def set_materials(self, materials: list[dict]):
         self.materials_json = json.dumps(materials)
         self.material_count = len(materials)
-        self.priced_count = sum(1 for m in materials if "unit_cost" in m)
+        self.priced_count = sum(1 for m in materials if "line_total" in m)
         self.total_cost = sum(m.get("line_total", 0) for m in materials)
 
     def get_materials(self) -> list[dict]:

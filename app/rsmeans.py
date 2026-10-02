@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 
 import httpx
 
@@ -11,6 +12,13 @@ logger = logging.getLogger(__name__)
 class PricingNotFoundError(Exception):
     """No pricing data found in RSMeans for this item."""
     pass
+
+
+def normalize_unit(unit: str) -> str:
+    unit = str(unit).lower().strip().replace("²", "2").replace("³", "3")
+    return {"sf": "sqft", "sq ft": "sqft", "ft2": "sqft", "lf": "lf",
+            "linear feet": "lf", "ft": "lf", "each": "ea", "cy": "cuyd",
+            "cu yd": "cuyd", "lbs": "lb"}.get(unit, unit)
 
 
 class RSMeansClient:
@@ -74,12 +82,21 @@ class RSMeansClient:
         top = results[0]
         cost_info = {
             "unit_cost": float(top.get("unitCost", top.get("unit_cost", top.get("totalCost", 0)))),
-            "unit": top.get("unit", "ea"),
+            "unit": top.get("unit", ""),
             "description": top.get("description", search_term),
             "rsmeans_code": top.get("lineNumber", top.get("code", "N/A")),
-            "material_cost": float(top.get("materialCost", top.get("material_cost", 0))),
+            "material_cost": top.get("materialCost", top.get("material_cost")),
             "labor_cost": float(top.get("laborCost", top.get("labor_cost", 0))),
         }
+
+        value = cost_info["material_cost"]
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            raise PricingNotFoundError("Material-only price is unavailable")
+        if not math.isfinite(value) or value < 0 or not cost_info["unit"]:
+            raise PricingNotFoundError("Invalid material price or missing pricing unit")
+        cost_info["material_cost"] = value
 
         logger.info(
             "RSMeans result: '%s' → $%.2f/%s (code: %s)",
@@ -101,6 +118,10 @@ class RSMeansClient:
             entry = {**material}
             search_term = material.get("rsmeans_search_term")
 
+            if material.get("match_warning"):
+                entry["cost_error"] = "Ambiguous material match; verify the specification before pricing"
+                return entry
+
             if not search_term:
                 entry["cost_error"] = "No RSMeans search term available"
                 return entry
@@ -110,7 +131,22 @@ class RSMeansClient:
                     search_term=search_term,
                     division=material.get("rsmeans_division"),
                 )
-                entry["unit_cost"] = cost_info["unit_cost"]
+                entry["pricing_unit"] = cost_info["unit"]
+                if not material.get("unit") or normalize_unit(material["unit"]) != normalize_unit(cost_info["unit"]):
+                    entry["cost_error"] = f"Unit mismatch: quantity uses {material.get('unit', 'unknown')}, price uses {cost_info['unit']}. Measurements or conversion required."
+                    return entry
+                entry["unit_cost"] = cost_info["material_cost"]
+                entry["cost_basis"] = "materials_only"
+                quantity = material.get("quantity")
+                if quantity is None:
+                    entry["cost_error"] = "Quantity requires a measurement or visible count"
+                    return entry
+                quantity = float(quantity)
+                if not math.isfinite(quantity) or quantity < 0:
+                    entry["cost_error"] = "Invalid quantity"
+                    return entry
+                entry["unit_cost"] = cost_info["material_cost"]
+                entry["cost_basis"] = "materials_only"
                 entry["material_cost"] = cost_info["material_cost"]
                 entry["labor_cost"] = cost_info["labor_cost"]
                 entry["rsmeans_description"] = cost_info["description"]
@@ -118,7 +154,7 @@ class RSMeansClient:
 
                 # Calculate total cost for this line item
                 quantity = float(material.get("quantity", 0))
-                entry["line_total"] = round(quantity * cost_info["unit_cost"], 2)
+                entry["line_total"] = round(quantity * entry["unit_cost"], 2)
 
             except PricingNotFoundError:
                 entry["cost_error"] = f"No pricing found for '{search_term}'"
@@ -130,9 +166,10 @@ class RSMeansClient:
                 else:
                     entry["cost_error"] = f"RSMeans API error: {e.response.status_code}"
                     logger.error("RSMeans API error: %s", e)
-            except httpx.TimeoutException:
-                entry["cost_error"] = "RSMeans API timeout"
-                logger.error("RSMeans timeout for: %s", search_term)
+            except (TypeError, ValueError, KeyError):
+                entry["cost_error"] = "Invalid pricing response or quantity"
+            except httpx.RequestError:
+                entry["cost_error"] = "Pricing service unavailable"
 
             return entry
 
