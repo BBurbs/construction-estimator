@@ -277,7 +277,7 @@
             <div class="summary">
                 <div class="summary-card">
                     <div class="value cost" id="totalCost">$0</div>
-                    <div class="label">Estimated Total</div>
+                    <div class="label">Priced Material Subtotal</div>
                 </div>
                 <div class="summary-card">
                     <div class="value" id="materialCount">0</div>
@@ -289,6 +289,7 @@
                 </div>
             </div>
 
+            <p style="color:#94a3b8; margin:16px 0">Preliminary visible-material costs only. Missing quantities and unpriced items are excluded. Labor, equipment, tax, delivery, overhead and profit are excluded. Verify measurements and specifications before using this estimate. Quantity edits are temporary and are not saved to history.</p>
             <div class="materials-table">
                 <table>
                     <thead>
@@ -410,6 +411,12 @@
             }
         }
 
+        function escapeHtml(value) {
+            const node = document.createElement('span');
+            node.textContent = String(value ?? '');
+            return node.innerHTML;
+        }
+
         function displayResults(data) {
             currentMaterials = data.materials || [];
 
@@ -422,12 +429,14 @@
             const tbody = document.getElementById('materialsBody');
             tbody.innerHTML = '';
 
-            currentMaterials.forEach((m, i) => {
+            currentMaterials.forEach((material, i) => {
+                const m = {...material};
+                for (const key of ["name", "matched_name", "match_error", "cost_error", "unit", "notes"]) m[key] = escapeHtml(m[key]);
                 const tr = document.createElement('tr');
-                const badgeClass = m.cost_error ? 'badge-error' : `badge-${m.confidence || 'low'}`;
-                const badgeText = m.cost_error ? 'no price' : (m.confidence || 'low');
+                const badgeClass = m.cost_error ? 'badge-error' : `badge-${["high", "medium", "low"].includes(m.confidence) ? m.confidence : "low"}`;
+                const badgeText = m.cost_error ? 'needs review' : (m.confidence || 'low');
 
-                const unitCostText = m.unit_cost != null ? '$' + m.unit_cost.toFixed(2) : (m.cost_error || 'N/A');
+                const unitCostText = (m.unit_cost != null ? '$' + m.unit_cost.toFixed(2) : 'N/A') + (m.cost_error ? '<br><small>' + m.cost_error + '</small>' : '');
                 const lineTotalText = m.line_total != null ? '$' + m.line_total.toFixed(2) : '-';
 
                 const nameHtml = m.match_warning
@@ -437,8 +446,8 @@
                     : `${m.name}${m.matched_name && m.matched_name !== m.name ? '<br><small style="color:#64748b">matched: ' + m.matched_name + '</small>' : ''}`;
 
                 tr.innerHTML = `
-                    <td>${nameHtml}</td>
-                    <td><input class="qty-input" type="number" value="${m.quantity || 0}" min="0" step="1" onchange="updateQty(${i}, this.value)"></td>
+                    <td>${nameHtml}<br><small>${m.notes}</small></td>
+                    <td><input class="qty-input" type="number" value="${m.quantity ?? ''}" placeholder="Measure" min="0" step="any" onchange="updateQty(${i}, this.value)"></td>
                     <td>${m.unit || 'ea'}</td>
                     <td><span class="badge ${badgeClass}">${badgeText}</span></td>
                     <td>${unitCostText}</td>
@@ -451,7 +460,8 @@
         }
 
         function updateQty(index, newQty) {
-            const qty = parseFloat(newQty) || 0;
+            const qty = Number(newQty);
+            if (!Number.isFinite(qty) || qty < 0 || newQty.trim() === "") return;
             currentMaterials[index].quantity = qty;
 
             if (currentMaterials[index].unit_cost != null) {
@@ -479,7 +489,7 @@
                 list.innerHTML = data.estimates.map(e => `
                     <div class="history-item" onclick="loadEstimate(${e.id})">
                         <div>
-                            <div class="desc">${e.scene_description || 'Construction estimate'}</div>
+                            <div class="desc">${escapeHtml(e.scene_description || 'Construction estimate')}</div>
                             <div class="meta">${e.material_count} materials &middot; ${new Date(e.created_at).toLocaleDateString()}</div>
                         </div>
                         <div class="cost">$${(e.total_cost || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>

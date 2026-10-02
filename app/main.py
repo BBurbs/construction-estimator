@@ -3,11 +3,11 @@ import os
 import time
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.image_utils import process_upload, ImageValidationError
+from app.image_utils import process_upload, ImageValidationError, MAX_FILE_SIZE
 from app.vision import analyze_image, VisionRefusalError, EmptyAnalysisError
 from app.matcher import match_materials
 from app.rsmeans import RSMeansClient, PricingNotFoundError
@@ -53,7 +53,7 @@ async def create_estimate(file: UploadFile = File(...)):
 
     # Step 1: Read and validate image
     try:
-        file_bytes = await file.read()
+        file_bytes = await file.read(MAX_FILE_SIZE + 1)
         filename, jpeg_bytes = process_upload(
             content_type=file.content_type or "application/octet-stream",
             file_size=len(file_bytes),
@@ -84,8 +84,8 @@ async def create_estimate(file: UploadFile = File(...)):
         return JSONResponse(
             status_code=200,
             content={
-                "scene_description": analysis.get("scene_description", ""),
-                "limitations": analysis.get("limitations", ""),
+                "scene_description": "",
+                "limitations": "The analysis did not return a usable material list.",
                 "materials": [],
                 "total_cost": 0,
                 "material_count": 0,
@@ -125,7 +125,7 @@ async def create_estimate(file: UploadFile = File(...)):
         await rsmeans_client.close()
 
     total_cost = sum(m.get("line_total", 0) for m in priced_materials)
-    priced_count = sum(1 for m in priced_materials if "unit_cost" in m)
+    priced_count = sum(1 for m in priced_materials if "line_total" in m)
 
     logger.info(
         "%s: Pricing complete — %d/%d priced, total: $%.2f",
@@ -149,6 +149,9 @@ async def create_estimate(file: UploadFile = File(...)):
     # Step 6: Return results
     response = {
         "id": estimate_id,
+        "cost_basis": "materials_only",
+        "estimate_status": "partial" if priced_count < len(priced_materials) else "preliminary",
+        "unpriced_count": len(priced_materials) - priced_count,
         "scene_description": analysis.get("scene_description", ""),
         "limitations": analysis.get("limitations", ""),
         "materials": priced_materials,
@@ -162,7 +165,7 @@ async def create_estimate(file: UploadFile = File(...)):
 
 
 @app.get("/api/estimates")
-async def list_estimates(limit: int = 50, offset: int = 0):
+async def list_estimates(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)):
     """List past estimates, newest first."""
     estimates = get_estimates(limit=limit, offset=offset)
     return JSONResponse(status_code=200, content={"estimates": estimates})

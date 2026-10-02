@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class MaterialItem(BaseModel):
     name: str
-    quantity: float
+    quantity: float | None
     unit: str
     confidence: str  # high, medium, low
     notes: str = ""

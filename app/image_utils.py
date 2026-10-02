@@ -3,7 +3,7 @@ import uuid
 import logging
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +118,11 @@ def process_upload(content_type: str, file_size: int, file_bytes: bytes, origina
     Returns (saved_filename, jpeg_bytes).
     """
     img = validate_image(content_type, file_size, file_bytes)
+    img = ImageOps.exif_transpose(img)
+    img.thumbnail((2048, 2048))
     img = strip_exif(img)
     jpeg_bytes = convert_to_jpeg(img)
-    filename = save_image(file_bytes, original_filename)
+    filename = save_image(jpeg_bytes, "upload.jpg")
 
     logger.info(
         "Upload processed: %s → %s (%d bytes → %d bytes JPEG)",

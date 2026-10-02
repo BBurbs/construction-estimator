@@ -85,15 +85,15 @@ class TestRSMeansLookupMultiple:
         )
 
         materials = [
-            {"name": "2x4", "rsmeans_search_term": "lumber 2x4", "rsmeans_division": "06", "quantity": 50},
-            {"name": "drywall", "rsmeans_search_term": "gypsum drywall", "rsmeans_division": "09", "quantity": 200},
+            {"name": "2x4", "rsmeans_search_term": "lumber 2x4", "rsmeans_division": "06", "quantity": 50, "unit": "lf"},
+            {"name": "drywall", "rsmeans_search_term": "gypsum drywall", "rsmeans_division": "09", "quantity": 200, "unit": "lf"},
         ]
 
         results = await rsmeans_client.lookup_multiple(materials)
         assert len(results) == 2
-        assert results[0]["unit_cost"] == 2.00
-        assert results[0]["line_total"] == 100.00  # 50 * 2.00
-        assert results[1]["line_total"] == 400.00  # 200 * 2.00
+        assert results[0]["unit_cost"] == 1.00
+        assert results[0]["line_total"] == 50.00  # 50 * material-only cost
+        assert results[1]["line_total"] == 200.00  # 200 * material-only cost
 
         await rsmeans_client.close()
 
